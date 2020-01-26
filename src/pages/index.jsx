@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import add from 'date-fns/add';
 import sub from 'date-fns/sub';
 import isValid from 'date-fns/isValid';
+import isSameDay from 'date-fns/isSameDay'
 import differenceInDays from 'date-fns/differenceInDays';
 import differenceInYears from 'date-fns/differenceInYears';
 import differenceInMonths from 'date-fns/differenceInMonths';
@@ -16,13 +17,7 @@ import addWeeks from 'date-fns/addWeeks';
 import subWeeks from 'date-fns/subWeeks';
 import lightFormat from 'date-fns/lightFormat';
 
-
 const DATE_FORMAT = 'yyyy-MM-dd';
-const DATE_TIME_FORMAT = 'yyyy-MM-dd HH:mm:ss::SSS'
-
-const logDate = (date, msg) => {
-  console.log(`${msg} ${formatDay(date, DATE_TIME_FORMAT)}`);
-}
 
 const getOptimizedDiff = (start, end) =>{
   const years = differenceInYears(end, start);
@@ -97,7 +92,6 @@ function parseItem(config = {}, obj = {}){
     ...getKeyedItem(config),
     ...obj
   }).map(([key, val]) => [key, (config[key] || defaultConf).parserFn(val)]).reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
-  console.log(nonDefaulted);
   return Object.entries(nonDefaulted).map(([key, val]) => ([key, typeof val === 'undefined' ? (config[key] || defaultConf).defaultValue(key, val, nonDefaulted) : val])).reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {})
 }
 
@@ -138,9 +132,7 @@ const useQueryStore = (config) => {
       firstSetVal.current = false;
       return;
     }
-    console.log(router.query, serializeItem(config, val), !equalShallow(router.query, serializeItem(config, val)), 'SetVal')
     if (!equalShallow(router.query, serializeItem(config, val))) {
-      console.log('Setting VAL')
       setData(parseItem(config, router.query));
     }
   }, [router.query])
@@ -151,9 +143,7 @@ const useQueryStore = (config) => {
       return;
     }
     const item = serializeItem(config, val);
-    console.log(router.query, item, !equalShallow(router.query, item), 'Replace Url')
     if (!equalShallow(router.query, item)){
-      console.log('Router Replace URl')
       router.replace({ pathname: router.pathname, query: item }, undefined, { shallow: true });
     }
   }, [val]);
@@ -166,9 +156,7 @@ const numberConf = {
   parserFn: (a) => typeof a === 'undefined' ? undefined : getNum(a),
   serializerFn: (n) => n ? stringify(n) : undefined,
   defaultValue: (key, val, nonDefaulted) => {
-    console.log(key, nonDefaulted)
     if (!isValid(nonDefaulted.start) || !isValid(nonDefaulted.end)){
-      console.log('NOT VALID!')
       return 0;
     }
     const optimal = getOptimizedDiff(nonDefaulted.start, nonDefaulted.end);
@@ -177,24 +165,20 @@ const numberConf = {
 }
 const endDateConf = {
   parserFn: (d) => d ? getDay(d) : undefined,
-  serializerFn: (d) => isValid(d) ? formatDay(d) : undefined,
+  serializerFn: (d) => isValid(d) && !isSameDay(getDay(d), getDay()) ? formatDay(d) : undefined,
   defaultValue: (key, val, nonDefaulted) => {
-    if (!isValid(nonDefaulted.start)){
-      return undefined;
-    }
-    const endDate = addWeeks(add(nonDefaulted.start, {
+    const endDate = addWeeks(add(nonDefaulted.start || getDay(), {
       years: nonDefaulted.year||0,
       months: nonDefaulted.months || 0,
       days: nonDefaulted.days || 0,
     }), nonDefaulted.weeks || 0);
-    console.log({endDate, start: nonDefaulted.start})
     return endDate;
   },
 }
 
 const startDateConf = {
   parserFn: (d) => d ? getDay(d) : undefined,
-  serializerFn: (d) => isValid(d) ? formatDay(d) : undefined,
+  serializerFn: (d) => isValid(d) && !isSameDay(getDay(d), getDay()) ? formatDay(d) : undefined,
   defaultValue: (key, val, nonDefaulted) => {
     if(!isValid(nonDefaulted.end)){
       return getDay();
@@ -204,12 +188,12 @@ const startDateConf = {
       months: nonDefaulted.months || 0,
       days: nonDefaulted.days || 0,
     }), nonDefaulted.weeks || 0);
-    console.log({startDate});
     return startDate;
   },
 }
 
 export default function Example() {
+  const router = useRouter();
   const [data, setData] = useQueryStore({
     start: startDateConf,
     end: endDateConf,
@@ -245,12 +229,11 @@ export default function Example() {
     })
   }
 
-  console.log(data.start);
-  console.log(data.end);
 
   return (
   <>
     <h1>Date Calculator</h1>
+    <button onClick={() => router.replace(router.pathname, undefined, {shallow: true})} >Reset</button>
     <div>
         <h2>Calculation</h2>
         <div>
